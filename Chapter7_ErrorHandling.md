@@ -70,7 +70,7 @@ public class DeviceController {
 <br>
 
 ## 미확인 예외를 사용하라
-  <hr/>
+
 
 - 확인된 예외: 컴파일 시점에 예외 처리 여부 확인
   - ex) `FileNotFoundException`, `SQLException`
