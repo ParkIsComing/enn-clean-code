@@ -1,3 +1,5 @@
+# Chapter 3 - 함수
+
 ### Intro
 
 의도를 분명히 표현하는 함수를 어떻게 구현할 수 있을까?
@@ -176,4 +178,164 @@ public class EmployeeFactoryImpl implements EmployeeFactory {
     
     `Circle makeCircle(Point center, double radius);`
     
-    x,y를 인자로 넘기는 것보다 Point를 넘기는 것이 더 낫다.
+    x,y를 인자로 넘기는 것보다 Point를 넘기는 것이 더 낫다.                  
+    
+- **인수 목록**
+    
+    때로는 인수 개수가 가변적인 함수도 필요하다.
+    
+     `String.format("%s worked %.2f hours.", name, hours);`
+    
+    이 함수의 가변 인수 전부를 동등하게 취급했을 때 List형 인수 하나로 취급할 수 있기 때문에 String.format 함수는 사실상 이항 함수라고 할 수 있다.
+    
+- **동사와 키워드**
+    - 단항 함수는 함수와 인수가 동사/명사 쌍을 이뤄야 한다.
+        
+        `writeField(name);`
+        
+    - 함수 이름에 키워드(인수 이름)을 추가하면 인수 순서를 기억할 필요가 없어진다.
+        
+        `assertExpectedEqualsActual(expected, actual);`
+        
+
+### 5. 부수 효과 일으키지 말기
+
+부수 효과는 함수에서 한 가지를 하겠다고 약속하고는 남몰래 다른 짓을 하는 것이다.
+
+한 함수에서는 딱 한 가지만 수행할 것!
+
+```java
+public class UserValidator {
+	private Cryptographer cryptographer;
+	public boolean checkPassword(String userName, String password) { 
+		User user = UserGateway.findByName(userName);
+		if (user != User.NULL) {
+			String codedPhrase = user.getPhraseEncodedByPassword(); 
+			String phrase = cryptographer.decrypt(codedPhrase, password); 
+			if ("Valid Password".equals(phrase)) {
+				Session.initialize();
+				return true; 
+			}
+		}
+		return false; 
+	}
+}
+```
+
+`Session.initialize();`는 함수 이름과 맞지 않는 부수 효과이다.
+
+- 출력 인수
+    
+    출력 인수는 피해야 한다.
+    
+    우리는 인수를 일반적으로 입력으로 해석하기 때문에 거슬린다.
+    
+    함수에서 상태를 변경해야 한다면 함수가 속한 객체 상태를 변경하는 방식을 택하라.
+    
+
+### 6. 명령과 조회 분리하기
+
+함수는 객체 상태를 변경하거나, 객체 정보를 반환하거나 둘 중 하나만 해야 한다. 그러지 않을 경우 혼란을 초래한다.
+
+`public boolean set(String attribute, String value);`
+
+위 같은 경우 속성 값 설정 성공 시 true, 실패시 false를 반환하므로 다음과 같은 괴상한 코드가 작성된다.
+
+`if (set("username", "unclebob")) ...`
+
+함수의 개발자는 set을 동사로 의도했지만 if문에 넣고 보면 형용사로 느껴진다.
+
+그러므로 명령과 조회를 분리해 혼란을 주지 않도록 한다.
+
+### 7. 오류 코드보다 예외 사용하기
+
+```java
+if (deletePage(page) == E_OK) {
+	if (registry.deleteReference(page.name) == E_OK) {
+		if (configKeys.deleteKey(page.name.makeKey()) == E_OK) {
+			logger.log("page deleted");
+		} else {
+			logger.log("configKey not deleted");
+		}
+	} else {
+		logger.log("deleteReference from registry failed");
+	}
+} else {
+	logger.log("delete failed"); 
+	return E_ERROR;
+}
+```
+
+try/catch를 사용하면 오류 처리 코드가 원래 코드에서 분리되므로 코드가 깔끔해 진다.
+
+```java
+try {
+	deletePage(page);
+	registry.deleteReference(page.name);
+	configKeys.deleteKey(page.name.makeKey());
+}
+catch (Exception e) {
+	logger.log(e.getMessage());
+}
+```
+
+- try/catch 블록 뽑아내기
+    
+    try/catch는 정상 작동과 오류 처리 동작을 뒤섞는 추한 구조이므로 if/else 블록과 마찬가지로 별도 함수로 뽑아내는 편이 좋다.
+    
+
+```java
+//예외 처리 동작하는 부분
+public void delete(Page page) {
+	try {
+		deletePageAndAllReferences(page);
+  	} catch (Exception e) {
+  		logError(e);
+  	}
+}
+
+//실제로 페이지 제거하는 함수. 정상 동작하는 부분
+private void deletePageAndAllReferences(Page page) throws Exception {
+	deletePage(page);
+	registry.deleteReference(page.name);
+	configKeys.deleteKey(page.name.makeKey());
+}
+
+private void logError(Exception e) {
+	logger.log(e.getMessage());
+}
+```
+
+- 오류 처리도 ‘한 가지’ 작업이다.
+
+- Error.java 의존성 자석
+    
+    오류 코드를 반환한다는 것은, 어디에선가는 오류 코드를 정의한다는 뜻이다.
+    
+    ```java
+    public enum Error {
+    	OK,
+    	INVALID,
+    	NO_SUCH,
+    	LOCKED,
+    	OUT_OF_RESOURCES,
+    	WAITING_FOR_EVENT;
+    }
+    ```
+    
+    이런 클래스는 의존성 자석이므로(다른 클래스에서 import해 사용해야 하므로), 변경될 때의 코스트가 크다. 
+    
+    그러므로 오류 코드 대신 예외를 사용하는 것이 더 안전하다.
+    
+
+### 8. 반복 금지
+
+중복은 모든 소프트웨어에서 모든 악의 근원이므로 늘 중복을 제거하려는 지속적인 노력이 필요하다.
+
+### 9. 구조적 프로그래밍
+
+다익스트라의 구조적 프로그래밍의 원칙에 따르면, 모든 함수와 함수 내 모든 블록에는 입구와 출구가 하나만 존재해야 한다. 
+
+즉, 함수는 return문이 하나여야 되며, 루프 안에서 break나 continue를 사용해선 안되고, **goto는 절대로 사용하면 안된다.** 
+
+그러나 구조적 프로그래밍은 함수가 클 경우에만 상당 이익을 제공하므로, 함수를 작게 만든다면 오히려 return, break, continue를 여러 차례 사용하는 것이 함수의 의도를 표현하기 쉬워진다. 반면, goto문은 큰 함수에서만 의미가 있으므로 작은 함수에서는 피해야 한다.
